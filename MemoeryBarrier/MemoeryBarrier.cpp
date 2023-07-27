@@ -22,12 +22,28 @@ volatile int complier_sharedVariable;
 
 /* The 'volatile' keyword prevents compiler optimizations that could reorder reads / writes to sharedVariable
 Hardware Memory Barriers :
-These barriers involve CPU instructions that enforce ordering of memory operations at the hardware level.They ensure that memory operations on one processor core become visible to other cores in the correct order.Different processors have different instructions for memory barriers.For instance, on x86, the "MFENCE" instruction serves as a full memory barrier.
+These barriers involve CPU instructions that enforce ordering of memory operations at the hardware level.
+They ensure that memory operations on one processor core become visible to other cores in the correct order
+.Different processors have different instructions for memory barriers.For instance, 
+on x86, the "MFENCE" instruction serves as a full memory barrier.
 
 Here's a simple example to illustrate how a memory barrier can be used:
+In this example, the writer thread stores a value into the sharedVariable using std::memory_order_relaxed,
+which means the store operation itself is not synchronized. However, we enforce a memory barrier 
+with std::atomic_thread_fence(std::memory_order_release) after the store operation to ensure that
+all previous memory writes are visible to other threads.
+
+Similarly, the reader thread uses std::atomic_thread_fence(std::memory_order_acquire) before loading
+the value from sharedVariable, ensuring that the read operation is properly synchronized with any 
+preceding memory operations.
+
+Memory barriers play a crucial role in low-latency applications, where precise control over memory 
+access and synchronization is necessary to minimize delays and avoid race conditions. However, it's 
+essential to use them judiciously and understand the memory model and implications specific to your
+platform and requirements.
 */
 
-std::atomic<int> sharedVariable = 0;
+volatile std::atomic<int> sharedVariable = 0;
 
 void writerThread() {
     // Write to the shared variable
