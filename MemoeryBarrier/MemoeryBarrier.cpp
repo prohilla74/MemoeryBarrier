@@ -43,32 +43,79 @@ essential to use them judiciously and understand the memory model and implicatio
 platform and requirements.
 */
 
-volatile std::atomic<int> sharedVariable = 0;
+//volatile std::atomic<int> sharedVariable = 0;
+//
+//void writerThread() {
+//    // Write to the shared variable
+//    sharedVariable.store(42, std::memory_order_relaxed);
+//
+//    // Memory barrier (synchronize with release semantics)
+//    std::atomic_thread_fence(std::memory_order_release);
+//}
+//
+//void readerThread() {
+//    // Memory barrier (synchronize with acquire semantics)
+//    std::atomic_thread_fence(std::memory_order_acquire);
+//
+//    // Read the shared variable
+//    int value = sharedVariable.load(std::memory_order_relaxed);
+//
+//    std::cout << "Value read from sharedVariable: " << value << std::endl;
+//}
 
-void writerThread() {
-    // Write to the shared variable
-    sharedVariable.store(42, std::memory_order_relaxed);
+//int main() {
+//    std::thread writer(writerThread);
+//    std::thread reader(readerThread);
+//
+//    writer.join();
+//    reader.join();
+//
+//    return 0;
+//}
 
-    // Memory barrier (synchronize with release semantics)
-    std::atomic_thread_fence(std::memory_order_release);
+#include <iostream>
+#include <thread>
+#include <atomic>
+
+std::atomic<int> sharedCounter(0);
+
+void incrementCounter(int iterations) {
+    for (int i = 0; i < iterations; ++i) {
+        sharedCounter.fetch_add(1, std::memory_order_relaxed);
+         if (sharedCounter.load() % 50000 == 0 )
+           std::cout << "incrementCounter shared counter value: " << sharedCounter.load() << std::endl;
+    }
 }
 
-void readerThread() {
-    // Memory barrier (synchronize with acquire semantics)
-    std::atomic_thread_fence(std::memory_order_acquire);
-
-    // Read the shared variable
-    int value = sharedVariable.load(std::memory_order_relaxed);
-
-    std::cout << "Value read from sharedVariable: " << value << std::endl;
+void decrementCounter(int iterations) {
+    for (int i = 0; i < iterations; ++i) {
+        if (sharedCounter.load() > 0)
+            sharedCounter.fetch_sub(1, std::memory_order_relaxed);
+        //std::cout << "decrementCounter shared counter value: " << sharedCounter.load() << std::endl;
+    }
 }
 
 int main() {
-    std::thread writer(writerThread);
-    std::thread reader(readerThread);
+    int numIterations = 1000000;
+    //int numIterations = 1000;
+    int numThreads = 4;
 
-    writer.join();
-    reader.join();
+    std::thread t1(incrementCounter, numIterations);
+    // sleep
+
+    std::this_thread::sleep_for(std::chrono::seconds(5));
+
+    std::thread t2(decrementCounter, numIterations);
+    std::thread t3(incrementCounter, numIterations);
+    std::thread t4(decrementCounter, numIterations);
+
+    t1.join();
+    t2.join();
+    t3.join();
+    t4.join();
+
+    std::cout << "Final shared counter value: " << sharedCounter.load() << std::endl;
 
     return 0;
 }
+
