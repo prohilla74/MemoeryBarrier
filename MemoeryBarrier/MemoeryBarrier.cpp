@@ -73,6 +73,34 @@ platform and requirements.
 //    return 0;
 //}
 
+
+//we use std::atomic_thread_fence to introduce memory barriers beforeand after
+//reading the shared counter.The std::memory_order_acquire memory order is used 
+//before the load operation to ensure that any memory writes performed by other 
+//threads before this point are visible to the current thread.Similarly, 
+//the std::memory_order_release memory order is used after the load operation to
+//ensure that any memory writes performed by the current thread are visible to 
+//other threads after this point.
+//
+//This use of memory barriers provides proper synchronizationand ensures that the
+//final value read from the sharedCounter reflects the correct state after all the 
+//threads have completed their work.
+//
+//Please note that the choice of memory orderingsand memory barriers should be made carefully
+//based on the specific synchronization requirements of your program.In this example,
+//we use std::memory_order_relaxed for the atomic operations as it provides minimal synchronization overhead.
+//However, you might need different memory orderings for different use cases, depending on your specific
+//thread synchronization needs.Always ensure that your thread - safe design meets the requirements of 
+//your multi - threaded program and avoids potential data races or other synchronization issues.
+
+
+
+
+
+
+Regenerate
+
+
 #include <iostream>
 #include <thread>
 #include <atomic>
