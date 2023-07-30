@@ -95,12 +95,6 @@ platform and requirements.
 
 
 
-
-
-
-Regenerate
-
-
 #include <iostream>
 #include <thread>
 #include <atomic>
