@@ -4,16 +4,17 @@
 #include <thread>
 #include <chrono>
 
-void worker_thread(zmq::socket_t& worker) {
+void worker_thread(zmq::context_t& context) {
+    zmq::socket_t worker(context, ZMQ_DEALER);
+    worker.connect("inproc://workers");
+
     while (true) {
-        zmq::message_t identity;
         zmq::message_t request;
 
-        worker.recv(identity, zmq::recv_flags::none);  // Receive client identity
         worker.recv(request, zmq::recv_flags::none);   // Receive request
 
         std::string request_str(static_cast<char*>(request.data()), request.size());
-        std::cout << "Received Request from " << request_str << std::endl;
+        std::cout << "Received Request: " << request_str << std::endl;
 
         // Simulate some processing time
         std::this_thread::sleep_for(std::chrono::seconds(1));
@@ -21,10 +22,10 @@ void worker_thread(zmq::socket_t& worker) {
         // Process the request and prepare the response
         std::string response_msg = "Response to: " + request_str;
 
-        // Send the response back to the client
-        worker.send(identity, zmq::send_flags::sndmore);  // Send client identity
-        worker.send("", zmq::send_flags::sndmore);         // Send empty delimiter
-        worker.send(response_msg, zmq::send_flags::none); // Send response
+        // Send the response back to the server
+        zmq::message_t response(response_msg.size());
+        memcpy(response.data(), response_msg.data(), response_msg.size());
+        worker.send(response, zmq::send_flags::none); // Send response
     }
 }
 
@@ -36,9 +37,7 @@ int main() {
     // Start worker threads to handle requests
     std::vector<std::thread> worker_threads;
     for (int i = 0; i < 4; ++i) {
-        zmq::socket_t worker(context, ZMQ_DEALER);
-        router.connect("inproc://workers"); // Connect workers to the router
-        worker_threads.emplace_back(worker_thread, std::ref(worker));
+        worker_threads.emplace_back(worker_thread, std::ref(context));
     }
 
     // Main thread acts as the router
@@ -69,38 +68,3 @@ int main() {
 }
 
 
-
---- client 
-
-
-#include <zmq.hpp>
-#include <string>
-#include <iostream>
-
-int main() {
-    zmq::context_t context(1);
-    zmq::socket_t requester(context, ZMQ_REQ);
-
-    // Set a unique identity for the client (optional)
-    std::string client_identity = "Client1";
-    requester.setsockopt(ZMQ_IDENTITY, client_identity.c_str(), client_identity.size());
-
-    requester.connect("tcp://localhost:5555");
-
-    for (int request_number = 0; request_number < 5; ++request_number) {
-        std::string request_msg = "Request " + std::to_string(request_number);
-
-        // Send the request to the server
-        requester.send(request_msg, zmq::send_flags::sndmore);  // Send request
-        requester.send("", zmq::send_flags::none);              // Send empty delimiter
-
-        // Receive the response from the server
-        zmq::message_t response;
-        requester.recv(response);
-
-        std::string response_msg(static_cast<char*>(response.data()), response.size());
-        std::cout << "Received Reply: " << response_msg << std::endl;
-    }
-
-    return 0;
-}
