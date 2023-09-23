@@ -3,18 +3,22 @@
 #include <iostream>
 #include <thread>
 #include <chrono>
+#include <unordered_map>
 
-void worker_thread(zmq::context_t& context) {
-    zmq::socket_t worker(context, ZMQ_DEALER);
-    worker.connect("inproc://workers");
+std::unordered_map<std::string, zmq::socket_t*> clients;
 
+void client_handler(zmq::socket_t* client) {
     while (true) {
+        zmq::message_t identity;
+        zmq::message_t delimiter;
         zmq::message_t request;
 
-        worker.recv(request, zmq::recv_flags::none);   // Receive request
+        client->recv(&identity);
+        client->recv(&delimiter);
+        client->recv(&request);
 
         std::string request_str(static_cast<char*>(request.data()), request.size());
-        std::cout << "Received Request: " << request_str << std::endl;
+        std::cout << "Received Request from Client " << identity.to_string() << ": " << request_str << std::endl;
 
         // Simulate some processing time
         std::this_thread::sleep_for(std::chrono::seconds(1));
@@ -22,49 +26,48 @@ void worker_thread(zmq::context_t& context) {
         // Process the request and prepare the response
         std::string response_msg = "Response to: " + request_str;
 
-        // Send the response back to the server
+        // Send the response back to the client
         zmq::message_t response(response_msg.size());
         memcpy(response.data(), response_msg.data(), response_msg.size());
-        worker.send(response, zmq::send_flags::none); // Send response
+
+        // Send the identity of the client before the response
+        client->send(identity, ZMQ_SNDMORE);
+        client->send(delimiter, ZMQ_SNDMORE);
+        client->send(response);
     }
 }
 
 int main() {
     zmq::context_t context(1);
-    zmq::socket_t router(context, ZMQ_ROUTER);
-    router.bind("tcp://*:5555");
+    zmq::socket_t server(context, ZMQ_ROUTER);
+    server.bind("tcp://*:5555");
 
-    // Start worker threads to handle requests
-    std::vector<std::thread> worker_threads;
-    for (int i = 0; i < 4; ++i) {
-        worker_threads.emplace_back(worker_thread, std::ref(context));
-    }
-
-    // Main thread acts as the router
     while (true) {
         zmq::message_t identity;
         zmq::message_t delimiter;
         zmq::message_t request;
 
-        router.recv(identity, zmq::recv_flags::none);  // Receive client identity
-        router.recv(delimiter, zmq::recv_flags::none); // Receive delimiter
-        router.recv(request, zmq::recv_flags::none);   // Receive request
+        server.recv(&identity);
+        server.recv(&delimiter);
+        server.recv(&request);
 
-        std::string request_str(static_cast<char*>(request.data()), request.size());
-        std::cout << "Received Request from " << request_str << std::endl;
+        std::string client_identity = identity.to_string();
+        if (clients.find(client_identity) == clients.end()) {
+            zmq::socket_t* client = new zmq::socket_t(context, ZMQ_ROUTER);
+            client->setsockopt(ZMQ_IDENTITY, client_identity.c_str(), client_identity.size());
+            client->connect("inproc://workers");
+            clients[client_identity] = client;
 
-        // Forward the request to a worker (round-robin)
-        router.send(identity, zmq::send_flags::sndmore);  // Send client identity
-        router.send("", zmq::send_flags::sndmore);         // Send empty delimiter
-        router.send(request, zmq::send_flags::none);      // Send request
-    }
+            std::thread(client_handler, client).detach();
+        }
 
-    // Join worker threads (not reached in this example)
-    for (auto& thread : worker_threads) {
-        thread.join();
+        zmq::socket_t* client = clients[client_identity];
+
+        // Forward the request to the client
+        client->send(identity, ZMQ_SNDMORE);
+        client->send(delimiter, ZMQ_SNDMORE);
+        client->send(request);
     }
 
     return 0;
 }
-
-
