@@ -6,7 +6,7 @@
 
 void workerTask(int workerId) {
     zmq::context_t context(1);
-    zmq::socket_t worker(context, ZMQ_DEALER);
+    zmq::socket_t worker(context, ZMQ_PULL);
     worker.connect("inproc://workers");
 
     while (true) {
@@ -26,7 +26,9 @@ void workerTask(int workerId) {
         memcpy(response.data(), responseMsg.data(), responseMsg.size());
 
         // Send the response back to the server
-        worker.send(response);
+        zmq::socket_t client(context, ZMQ_PUSH);
+        client.connect("inproc://clients");
+        client.send(response);
     }
 }
 
@@ -41,6 +43,10 @@ int main() {
     for (int i = 0; i < numWorkers; ++i) {
         workerThreads.emplace_back(workerTask, i);
     }
+
+    // Create a socket for forwarding responses to clients
+    zmq::socket_t forwarder(context, ZMQ_PULL);
+    forwarder.bind("inproc://clients");
 
     while (true) {
         // Receive client identity (first frame)
@@ -59,45 +65,12 @@ int main() {
         std::string requestStr(static_cast<char*>(request.data()), request.size());
         std::cout << "Server Received Request from " << clientIdentity << ": " << requestStr << std::endl;
 
-        // Forward the request to a worker using DEALER socket
-        zmq::socket_t worker(context, ZMQ_DEALER);
-        worker.connect("inproc://workers");
-        worker.send(identity, ZMQ_SNDMORE);
-        worker.send(empty, ZMQ_SNDMORE);
-        worker.send(request);
+        // Forward the request to a worker using PULL socket
+        forwarder.send(request);
     }
 
     for (int i = 0; i < numWorkers; ++i) {
         workerThreads[i].join();
-    }
-
-    return 0;
-}
-
-
-client 
-
-#include <zmq.hpp>
-#include <string>
-#include <iostream>
-
-int main() {
-    zmq::context_t context(1);
-    zmq::socket_t client(context, ZMQ_REQ);
-    client.connect("tcp://localhost:5555");
-
-    for (int i = 0; i < 3; ++i) {
-        // Send a request to the server
-        std::string requestMsg = "Client Request " + std::to_string(i);
-        zmq::message_t request(requestMsg.size());
-        memcpy(request.data(), requestMsg.c_str(), requestMsg.size());
-        client.send(request);
-
-        // Receive and process the response from the server
-        zmq::message_t response;
-        client.recv(&response);
-        std::string responseStr(static_cast<char*>(response.data()), response.size());
-        std::cout << "Client Received Response: " << responseStr << std::endl;
     }
 
     return 0;
