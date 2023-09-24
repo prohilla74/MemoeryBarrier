@@ -3,7 +3,6 @@
 #include <iostream>
 #include <thread>
 #include <chrono>
-#include <vector>
 
 const int numWorkerThreads = 5;
 
@@ -47,20 +46,21 @@ int main() {
 
     while (true) {
         zmq::message_t identity;
+        zmq::message_t empty;
         zmq::message_t request;
-        server.recv(&identity, ZMQ_SNDMORE); // Receive client identity
-        server.recv(&request);              // Receive request
+        
+        server.recv(&identity, ZMQ_RCVMORE); // Receive client identity
+        server.recv(&empty, ZMQ_RCVMORE);    // Receive empty delimiter
+        server.recv(&request);               // Receive request
 
         // Forward the request to a worker thread for processing
         zmq::socket_t worker(context, ZMQ_DEALER);
         worker.connect("inproc://workers");
         worker.send(identity, ZMQ_SNDMORE); // Forward client identity
+        worker.send(empty, ZMQ_SNDMORE);    // Forward empty delimiter
         worker.send(request);
 
         // Note: You can add additional logic here if needed
-
-        // If you want the main thread to continue processing requests,
-        // you can omit this loop and handle requests asynchronously
     }
 
     for (int i = 0; i < numWorkerThreads; ++i) {
