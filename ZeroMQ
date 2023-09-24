@@ -2,34 +2,28 @@
 #include <string>
 #include <iostream>
 #include <thread>
-#include <chrono>
 #include <vector>
 
-const int numClients = 3;
-
-void workerThread(int id) {
+void workerTask(int workerId) {
     zmq::context_t context(1);
     zmq::socket_t worker(context, ZMQ_DEALER);
-
-    // Set a unique identity for each worker
-    std::string identity = "Worker" + std::to_string(id);
-    worker.setsockopt(ZMQ_IDENTITY, identity.c_str(), identity.size());
-    worker.connect("tcp://localhost:5555");
+    worker.connect("inproc://workers");
 
     while (true) {
         zmq::message_t request;
         worker.recv(&request);
 
         std::string requestStr(static_cast<char*>(request.data()), request.size());
-        std::cout << identity << " Received Request: " << requestStr << std::endl;
+        std::cout << "Worker " << workerId << " Received Request: " << requestStr << std::endl;
 
         // Simulate some processing time
         std::this_thread::sleep_for(std::chrono::seconds(1));
 
         // Process the request and prepare the response
         std::string responseMsg = "Response to: " + requestStr;
+
         zmq::message_t response(responseMsg.size());
-        memcpy(response.data(), responseMsg.c_str(), responseMsg.size());
+        memcpy(response.data(), responseMsg.data(), responseMsg.size());
 
         // Send the response back to the server
         worker.send(response);
@@ -41,10 +35,11 @@ int main() {
     zmq::socket_t server(context, ZMQ_ROUTER);
     server.bind("tcp://*:5555");
 
-    // Create and start worker threads
+    // Create worker threads
+    const int numWorkers = 3;
     std::vector<std::thread> workerThreads;
-    for (int i = 0; i < numClients; ++i) {
-        workerThreads.emplace_back(workerThread, i);
+    for (int i = 0; i < numWorkers; ++i) {
+        workerThreads.emplace_back(workerTask, i);
     }
 
     while (true) {
@@ -72,7 +67,7 @@ int main() {
         worker.send(request);
     }
 
-    for (int i = 0; i < numClients; ++i) {
+    for (int i = 0; i < numWorkers; ++i) {
         workerThreads[i].join();
     }
 
@@ -80,25 +75,20 @@ int main() {
 }
 
 
-
 client 
 
 #include <zmq.hpp>
 #include <string>
 #include <iostream>
-#include <thread>
-#include <chrono>
 
 int main() {
     zmq::context_t context(1);
-    zmq::socket_t client(context, ZMQ_DEALER);
-    client.setsockopt(ZMQ_IDENTITY, "Client", 6); // Set a unique identity
+    zmq::socket_t client(context, ZMQ_REQ);
     client.connect("tcp://localhost:5555");
 
-    int requestCount = 0;
-    while (true) {
+    for (int i = 0; i < 3; ++i) {
         // Send a request to the server
-        std::string requestMsg = "Request " + std::to_string(requestCount);
+        std::string requestMsg = "Client Request " + std::to_string(i);
         zmq::message_t request(requestMsg.size());
         memcpy(request.data(), requestMsg.c_str(), requestMsg.size());
         client.send(request);
@@ -108,14 +98,6 @@ int main() {
         client.recv(&response);
         std::string responseStr(static_cast<char*>(response.data()), response.size());
         std::cout << "Client Received Response: " << responseStr << std::endl;
-
-        // Increment request count
-        requestCount++;
-
-        // Add your logic here to decide when to exit the loop
-
-        // Simulate some delay before sending the next request
-        std::this_thread::sleep_for(std::chrono::seconds(2));
     }
 
     return 0;
