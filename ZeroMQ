@@ -4,13 +4,13 @@
 #include <thread>
 #include <chrono>
 #include <vector>
-#include <queue>
-#include <mutex>
-#include <condition_variable>
+#include <atomic>
 
 const int numWorkerThreads = 3;
 
-void workerThread(zmq::context_t& context) {
+std::atomic<int> nextThreadId(0);
+
+void workerThread(zmq::context_t& context, int threadId) {
     zmq::socket_t worker(context, ZMQ_REP);
     worker.connect("inproc://workers");
 
@@ -19,7 +19,7 @@ void workerThread(zmq::context_t& context) {
         worker.recv(&request);
 
         std::string request_str(static_cast<char*>(request.data()), request.size());
-        std::cout << "Worker Received Request: " << request_str << std::endl;
+        std::cout << "Worker " << threadId << " Received Request: " << request_str << std::endl;
 
         // Simulate some processing time
         std::this_thread::sleep_for(std::chrono::seconds(1));
@@ -27,7 +27,7 @@ void workerThread(zmq::context_t& context) {
         // Process the request and prepare the response
         std::string response_msg = "Response to: " + request_str;
 
-        // Send the response directly back to the client
+        // Send the response directly back to the client in the same thread
         zmq::message_t response(response_msg.size());
         memcpy(response.data(), response_msg.data(), response_msg.size());
         worker.send(response);
@@ -36,32 +36,37 @@ void workerThread(zmq::context_t& context) {
 
 int main() {
     zmq::context_t context(1);
-    zmq::socket_t server(context, ZMQ_REP);
+    zmq::socket_t server(context, ZMQ_ROUTER);
     server.bind("tcp://*:5555");
 
     // Create and start worker threads
     std::vector<std::thread> workerThreads;
     for (int i = 0; i < numWorkerThreads; ++i) {
-        workerThreads.emplace_back(workerThread, std::ref(context));
+        workerThreads.emplace_back(workerThread, std::ref(context), i);
     }
 
     while (true) {
+        zmq::message_t identity;
         zmq::message_t request;
-        server.recv(&request);
+        server.recv(&identity, ZMQ_SNDMORE); // Receive client identity
+        server.recv(&request);               // Receive request
 
-        // Add your logic to process the request here
+        // Forward the request to a worker thread for processing
+        int threadId = nextThreadId.fetch_add(1) % numWorkerThreads;
+        zmq::message_t request_copy(request.size());
+        memcpy(request_copy.data(), request.data(), request.size());
 
-        // Simulate some processing time
-        std::this_thread::sleep_for(std::chrono::seconds(1));
+        zmq::socket_t worker(context, ZMQ_DEALER);
+        worker.connect("inproc://workers");
+        worker.send(request_copy);
 
-        // Process the request and prepare the response
-        std::string request_str(static_cast<char*>(request.data()), request.size());
-        std::string response_msg = "Response to: " + request_str;
+        // Receive the response from the worker
+        zmq::message_t response;
+        worker.recv(&response);
 
-        // Send the response to one of the worker threads to handle the response sending
-        zmq::socket_t responseSender(context, ZMQ_PUSH);
-        responseSender.connect("inproc://responses");
-        responseSender.send(request, zmq::send_flags::dontwait);
+        // Send the response back to the client
+        server.send(identity, ZMQ_SNDMORE); // Send client identity
+        server.send(response);
     }
 
     for (int i = 0; i < numWorkerThreads; ++i) {
