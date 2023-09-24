@@ -4,73 +4,46 @@
 #include <thread>
 #include <vector>
 
-void workerTask(int workerId) {
-    zmq::context_t context(1);
+void workerThread(zmq::context_t& context) {
     zmq::socket_t worker(context, ZMQ_REP);
-    worker.connect("inproc://workers");
+    worker.connect("tcp://*:5565");
 
     while (true) {
         zmq::message_t request;
         worker.recv(&request);
 
-        std::string requestStr(static_cast<char*>(request.data()), request.size());
-        std::cout << "Worker " << workerId << " Received Request: " << requestStr << std::endl;
+        std::string request_str(static_cast<char*>(request.data()), request.size());
+        std::cout << "Worker Received Request: " << request_str << std::endl;
 
         // Simulate some processing time
         std::this_thread::sleep_for(std::chrono::seconds(1));
 
         // Process the request and prepare the response
-        std::string responseMsg = "Response to: " + requestStr;
+        std::string response_msg = "Response to: " + request_str;
 
-        zmq::message_t response(responseMsg.size());
-        memcpy(response.data(), responseMsg.data(), responseMsg.size());
-
-        // Send the response back to the client
+        // Send the response back to the broker
+        zmq::message_t response(response_msg.size());
+        memcpy(response.data(), response_msg.data(), response_msg.size());
         worker.send(response);
     }
 }
 
 int main() {
     zmq::context_t context(1);
-    zmq::socket_t server(context, ZMQ_ROUTER);
-    server.bind("tcp://*:5555");
+    zmq::socket_t broker(context, ZMQ_ROUTER);
+    broker.bind("tcp://*:5555");
 
-    // Create worker threads
-    const int numWorkers = 3;
+    zmq::socket_t workers(context, ZMQ_DEALER);
+    workers.bind("tcp://*:5565");
+
     std::vector<std::thread> workerThreads;
+    int numWorkers = 3; // Adjust this to the desired number of worker threads
+
     for (int i = 0; i < numWorkers; ++i) {
-        workerThreads.emplace_back(workerTask, i);
+        workerThreads.emplace_back(workerThread, std::ref(context));
     }
 
-    while (true) {
-        // Receive client identity (first frame)
-        zmq::message_t identity;
-        server.recv(&identity);
-
-        // Receive empty delimiter (second frame)
-        zmq::message_t empty;
-        server.recv(&empty);
-
-        // Receive the request (third frame)
-        zmq::message_t request;
-        server.recv(&request);
-
-        std::string clientIdentity(static_cast<char*>(identity.data()), identity.size());
-        std::string requestStr(static_cast<char*>(request.data()), request.size());
-        std::cout << "Server Received Request from " << clientIdentity << ": " << requestStr << std::endl;
-
-        // Forward the request to a worker using REP socket
-        zmq::socket_t worker(context, ZMQ_REQ);
-        worker.connect("inproc://workers");
-        worker.send(request);
-
-        // Receive and forward the response from the worker
-        zmq::message_t response;
-        worker.recv(&response);
-        server.send(identity, ZMQ_SNDMORE);
-        server.send(empty, ZMQ_SNDMORE);
-        server.send(response);
-    }
+    zmq::proxy(broker, workers, nullptr);
 
     for (int i = 0; i < numWorkers; ++i) {
         workerThreads[i].join();
@@ -78,32 +51,3 @@ int main() {
 
     return 0;
 }
-
-#include <zmq.hpp>
-#include <string>
-#include <iostream>
-
-int main() {
-    zmq::context_t context(1);
-    zmq::socket_t client(context, ZMQ_REQ);
-    client.connect("tcp://localhost:5555");
-
-    for (int i = 0; i < 5; ++i) {
-        // Send a request to the server
-        std::string requestMsg = "Client Request " + std::to_string(i);
-        zmq::message_t request(requestMsg.size());
-        memcpy(request.data(), requestMsg.c_str(), requestMsg.size());
-        client.send(request);
-
-        // Receive and process the response from the server
-        zmq::message_t response;
-        client.recv(&response);
-        std::string responseStr(static_cast<char*>(response.data()), response.size());
-        std::cout << "Client Received Response: " << responseStr << std::endl;
-    }
-
-    return 0;
-}
-
-
-client 
