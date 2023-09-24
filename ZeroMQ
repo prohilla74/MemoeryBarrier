@@ -6,8 +6,9 @@
 
 void workerTask(int workerId) {
     zmq::context_t context(1);
-    zmq::socket_t worker(context, ZMQ_PULL);
-    worker.connect("inproc://workers");
+    zmq::socket_t worker(context, ZMQ_SUB);
+    worker.connect("tcp://localhost:5556");
+    worker.setsockopt(ZMQ_SUBSCRIBE, "", 0);
 
     while (true) {
         zmq::message_t request;
@@ -26,16 +27,25 @@ void workerTask(int workerId) {
         memcpy(response.data(), responseMsg.data(), responseMsg.size());
 
         // Send the response back to the server
-        zmq::socket_t client(context, ZMQ_PUSH);
-        client.connect("inproc://clients");
+        zmq::socket_t client(context, ZMQ_PUB);
+        client.connect("tcp://localhost:5557");
         client.send(response);
     }
 }
 
 int main() {
     zmq::context_t context(1);
-    zmq::socket_t server(context, ZMQ_ROUTER);
-    server.bind("tcp://*:5555");
+
+    // Create a PUB socket for forwarding responses to clients
+    zmq::socket_t forwarder(context, ZMQ_PUB);
+    forwarder.bind("tcp://*:5557");
+
+    // Create SUB sockets for worker threads
+    zmq::socket_t workers(context, ZMQ_XSUB);
+    workers.bind("tcp://*:5556");
+
+    // Wait for subscriptions from workers
+    std::this_thread::sleep_for(std::chrono::seconds(1));
 
     // Create worker threads
     const int numWorkers = 3;
@@ -44,29 +54,11 @@ int main() {
         workerThreads.emplace_back(workerTask, i);
     }
 
-    // Create a socket for forwarding responses to clients
-    zmq::socket_t forwarder(context, ZMQ_PULL);
-    forwarder.bind("inproc://clients");
-
     while (true) {
-        // Receive client identity (first frame)
-        zmq::message_t identity;
-        server.recv(&identity);
-
-        // Receive empty delimiter (second frame)
-        zmq::message_t empty;
-        server.recv(&empty);
-
-        // Receive the request (third frame)
-        zmq::message_t request;
-        server.recv(&request);
-
-        std::string clientIdentity(static_cast<char*>(identity.data()), identity.size());
-        std::string requestStr(static_cast<char*>(request.data()), request.size());
-        std::cout << "Server Received Request from " << clientIdentity << ": " << requestStr << std::endl;
-
-        // Forward the request to a worker using PULL socket
-        forwarder.send(request);
+        // Pass messages between SUB and PUB sockets
+        zmq::message_t message;
+        workers.recv(&message);
+        forwarder.send(message);
     }
 
     for (int i = 0; i < numWorkers; ++i) {
