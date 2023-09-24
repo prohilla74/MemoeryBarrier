@@ -21,7 +21,7 @@ void workerThread(zmq::context_t& context) {
         // Process the request and prepare the response
         std::string response_msg = "Response to: " + request_str;
 
-        // Send the response back to the broker
+        // Send the response directly back to the client
         zmq::message_t response(response_msg.size());
         memcpy(response.data(), response_msg.data(), response_msg.size());
         worker.send(response);
