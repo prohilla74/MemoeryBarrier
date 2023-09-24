@@ -4,16 +4,16 @@
 #include <thread>
 #include <vector>
 
-void handleWorker(zmq::socket_t* broker) {
-    while (true) {
-        zmq::message_t identity;
-        zmq::message_t request;
+void workerThread(zmq::context_t& context) {
+    zmq::socket_t worker(context, ZMQ_DEALER);
+    worker.connect("inproc://workers");
 
-        broker->recv(&identity, ZMQ_SNDMORE);
-        broker->recv(&request);
+    while (true) {
+        zmq::message_t request;
+        worker.recv(&request);
 
         std::string request_str(static_cast<char*>(request.data()), request.size());
-        std::cout << "Received Request from Worker: " << request_str << std::endl;
+        std::cout << "Worker Received Request: " << request_str << std::endl;
 
         // Simulate some processing time
         std::this_thread::sleep_for(std::chrono::seconds(1));
@@ -24,9 +24,7 @@ void handleWorker(zmq::socket_t* broker) {
         // Send the response back to the broker
         zmq::message_t response(response_msg.size());
         memcpy(response.data(), response_msg.data(), response_msg.size());
-
-        broker->send(identity, ZMQ_SNDMORE);
-        broker->send(response);
+        worker.send(response);
     }
 }
 
@@ -35,32 +33,19 @@ int main() {
     zmq::socket_t broker(context, ZMQ_ROUTER);
     broker.bind("tcp://*:5555");
 
+    zmq::socket_t workers(context, ZMQ_DEALER);
+    workers.bind("inproc://workers");
+
     std::vector<std::thread> workerThreads;
+    int numWorkers = 3; // Adjust this to the desired number of worker threads
 
-    // Start multiple worker threads to handle requests
-    int num_workers = 3; // Adjust this to the desired number of worker threads
-    for (int i = 0; i < num_workers; ++i) {
-        workerThreads.emplace_back(handleWorker, &broker);
+    for (int i = 0; i < numWorkers; ++i) {
+        workerThreads.emplace_back(workerThread, std::ref(context));
     }
 
-    // Main loop to route requests to workers
-    while (true) {
-        zmq::message_t identity;
-        zmq::message_t delimiter;
-        zmq::message_t request;
+    zmq::proxy(broker, workers, nullptr);
 
-        broker.recv(&identity, ZMQ_SNDMORE);
-        broker.recv(&delimiter, ZMQ_SNDMORE);
-        broker.recv(&request);
-
-        // Forward the request to a worker using the identity
-        broker.send(identity, ZMQ_SNDMORE);
-        broker.send(delimiter, ZMQ_SNDMORE);
-        broker.send(request);
-    }
-
-    // Join the worker threads
-    for (int i = 0; i < num_workers; ++i) {
+    for (int i = 0; i < numWorkers; ++i) {
         workerThreads[i].join();
     }
 
