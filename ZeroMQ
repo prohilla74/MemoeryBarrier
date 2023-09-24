@@ -9,7 +9,7 @@ void handleWorker(zmq::socket_t* broker) {
         zmq::message_t identity;
         zmq::message_t request;
 
-        broker->recv(&identity);
+        broker->recv(&identity, ZMQ_SNDMORE);
         broker->recv(&request);
 
         std::string request_str(static_cast<char*>(request.data()), request.size());
@@ -46,13 +46,16 @@ int main() {
     // Main loop to route requests to workers
     while (true) {
         zmq::message_t identity;
+        zmq::message_t delimiter;
         zmq::message_t request;
 
-        broker.recv(&identity);
+        broker.recv(&identity, ZMQ_SNDMORE);
+        broker.recv(&delimiter, ZMQ_SNDMORE);
         broker.recv(&request);
 
-        // Forward the request to a worker (DEALER) using the identity
+        // Forward the request to a worker using the identity
         broker.send(identity, ZMQ_SNDMORE);
+        broker.send(delimiter, ZMQ_SNDMORE);
         broker.send(request);
     }
 
