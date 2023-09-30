@@ -90,3 +90,37 @@ int main() {
 
     return 0;
 }
+
+
+
+int main() {
+    // Native socket
+    int nativeSocket = socket(AF_INET, SOCK_STREAM, 0);
+    if (nativeSocket == -1) {
+        perror("Error creating socket");
+        return 1;
+    }
+
+    // Set TCP_NODELAY option
+    int flag = 1;
+    if (setsockopt(nativeSocket, IPPROTO_TCP, TCP_NODELAY, &flag, sizeof(int)) == -1) {
+        perror("Error setting TCP_NODELAY");
+        close(nativeSocket);
+        return 1;
+    }
+
+    // ZeroMQ context and socket
+    zmq::context_t context(1);
+    zmq::socket_t zmqSocket(context, ZMQ_PULL);
+    zmqSocket.setsockopt(ZMQ_FD, &nativeSocket, sizeof(nativeSocket));
+
+    // ... (rest of your application logic) ...
+
+    return 0;
+}
+In this example, the native socket is created and the TCP_NODELAY option is set. The ZeroMQ socket is then associated with this native socket. Please adapt this code to your specific requirements and test it thoroughly to ensure the desired behavior on your platform and ZeroMQ version.
+
+
+
+
+
