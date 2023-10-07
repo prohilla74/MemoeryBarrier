@@ -4,6 +4,7 @@
 #include <chrono>
 #include <ctime>
 #include <iomanip>
+#include <sstream>
 
 std::string getCurrentTimestamp() {
     // Get the current time point with millisecond precision
@@ -17,11 +18,20 @@ std::string getCurrentTimestamp() {
     std::tm *timeInfo = std::localtime(&currentTime);
 
     // Format the tm structure into a readable string with milliseconds
+    char buffer[80];  // Adjust the size if necessary
+    std::strftime(buffer, sizeof(buffer), "%Y-%m-%d %H:%M:%S", timeInfo);
+
     std::stringstream ss;
-    ss << std::put_time(timeInfo, "%Y-%m-%d %H:%M:%S") << '.' << std::setw(3) << std::setfill('0') << ms.count();
+    ss << buffer << '.' << std::setw(3) << std::setfill('0') << ms.count();
 
     return ss.str();
 }
+
+int main() {
+    std::cout << "Current timestamp: " << getCurrentTimestamp() << std::endl;
+    return 0;
+}
+
 
 
 #include <zmq.hpp>
