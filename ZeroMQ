@@ -5,7 +5,7 @@
 #include <ctime>
 #include <iomanip>
 
-int main() {
+std::string getCurrentTimestamp() {
     // Get the current time point with millisecond precision
     auto now = std::chrono::system_clock::now();
     auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()) % 1000;
@@ -17,14 +17,10 @@ int main() {
     std::tm *timeInfo = std::localtime(&currentTime);
 
     // Format the tm structure into a readable string with milliseconds
-    // You can customize the format by changing the format string
-    // For example, "%Y-%m-%d %H:%M:%S" for "YYYY-MM-DD HH:MM:SS"
-    std::cout << "Current time with milliseconds: " 
-              << std::put_time(timeInfo, "%Y-%m-%d %H:%M:%S")
-              << '.' << std::setw(3) << std::setfill('0') << ms.count()
-              << std::endl;
+    std::stringstream ss;
+    ss << std::put_time(timeInfo, "%Y-%m-%d %H:%M:%S") << '.' << std::setw(3) << std::setfill('0') << ms.count();
 
-    return 0;
+    return ss.str();
 }
 
 
