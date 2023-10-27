@@ -38,65 +38,64 @@ EXPORT void processData(void* data) {
 
 main.cpp 
 
-  #include <iostream>
+ #include <iostream>
 
-#if defined(_WIN32)
+#ifdef _WIN32
 #include <windows.h>
 #else
-#include <dlfcn.h>  // for dlopen, dlsym, dlclose
+#include <dlfcn.h>
 #endif
 
 int main() {
-#if defined(_WIN32)
-    // Load the dynamic library on Windows
+    // Load the dynamic library
+    #ifdef _WIN32
     HMODULE libraryHandle = LoadLibrary("example_lib.dll");
-    if (!libraryHandle) {
-        std::cerr << "Error loading library: " << GetLastError() << std::endl;
-        return 1;
-    }
-
-    // Function pointer for processData function on Windows
-    using ProcessDataFunc = void (*)(void*);
-    ProcessDataFunc processDataFunc = reinterpret_cast<ProcessDataFunc>(GetProcAddress(libraryHandle, "processData"));
-    if (!processDataFunc) {
-        std::cerr << "Error loading processData: " << GetLastError() << std::endl;
-        FreeLibrary(libraryHandle);
-        return 1;
-    }
-#else
-    // Load the dynamic library on Linux
+    #else
     void* libraryHandle = dlopen("./libexample_lib.so", RTLD_LAZY);
+    #endif
+
     if (!libraryHandle) {
-        std::cerr << "Error loading library: " << dlerror() << std::endl;
+        std::cerr << "Error loading library" << std::endl;
         return 1;
     }
 
-    // Function pointer for processData function on Linux
+    // Function pointer for processData function
     using ProcessDataFunc = void (*)(void*);
+
+    #ifdef _WIN32
+    ProcessDataFunc processDataFunc = reinterpret_cast<ProcessDataFunc>(GetProcAddress(libraryHandle, "processData"));
+    #else
     ProcessDataFunc processDataFunc = reinterpret_cast<ProcessDataFunc>(dlsym(libraryHandle, "processData"));
+    #endif
+
     if (!processDataFunc) {
-        std::cerr << "Error loading processData: " << dlerror() << std::endl;
+        std::cerr << "Error loading processData" << std::endl;
+        #ifdef _WIN32
+        FreeLibrary(libraryHandle);
+        #else
         dlclose(libraryHandle);
+        #endif
         return 1;
     }
-#endif
 
     // Data to pass to the shared library
-    int myData = 42;
+    int data1 = 42;
+    int data2 = 77;
 
     // Pass the pointer to the shared library
-    processDataFunc(&myData);
+    processDataFunc(&data1);
+    processDataFunc(&data2);
 
-#if defined(_WIN32)
-    // Close the library on Windows
+    // Close the library
+    #ifdef _WIN32
     FreeLibrary(libraryHandle);
-#else
-    // Close the library on Linux
+    #else
     dlclose(libraryHandle);
-#endif
+    #endif
 
     return 0;
 }
+
 
 
 bash 
