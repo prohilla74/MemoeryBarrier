@@ -1,0 +1,111 @@
+libExample.h
+
+  #ifndef LIB_EXAMPLE_H
+#define LIB_EXAMPLE_H
+
+#if defined(__cplusplus)
+extern "C" {
+#endif
+
+// Function that takes a pointer as an argument
+void processData(void* data);
+
+#if defined(__cplusplus)
+}
+#endif
+
+#endif // LIB_EXAMPLE_H
+
+
+  lib_example.cpp:
+#include "lib_example.h"
+#include <iostream>
+
+#if defined(_WIN32)
+#define EXPORT __declspec(dllexport)
+#else
+#define EXPORT
+#endif
+
+EXPORT void processData(void* data) {
+    // Cast the void pointer to the appropriate type
+    int* intPtr = static_cast<int*>(data);
+
+    // Use the data in the shared library
+    std::cout << "Data received in shared library: " << *intPtr << std::endl;
+}
+
+
+main.cpp 
+
+  #include <iostream>
+
+#if defined(_WIN32)
+#include <windows.h>
+#else
+#include <dlfcn.h>  // for dlopen, dlsym, dlclose
+#endif
+
+int main() {
+#if defined(_WIN32)
+    // Load the dynamic library on Windows
+    HMODULE libraryHandle = LoadLibrary("example_lib.dll");
+    if (!libraryHandle) {
+        std::cerr << "Error loading library: " << GetLastError() << std::endl;
+        return 1;
+    }
+
+    // Function pointer for processData function on Windows
+    using ProcessDataFunc = void (*)(void*);
+    ProcessDataFunc processDataFunc = reinterpret_cast<ProcessDataFunc>(GetProcAddress(libraryHandle, "processData"));
+    if (!processDataFunc) {
+        std::cerr << "Error loading processData: " << GetLastError() << std::endl;
+        FreeLibrary(libraryHandle);
+        return 1;
+    }
+#else
+    // Load the dynamic library on Linux
+    void* libraryHandle = dlopen("./libexample_lib.so", RTLD_LAZY);
+    if (!libraryHandle) {
+        std::cerr << "Error loading library: " << dlerror() << std::endl;
+        return 1;
+    }
+
+    // Function pointer for processData function on Linux
+    using ProcessDataFunc = void (*)(void*);
+    ProcessDataFunc processDataFunc = reinterpret_cast<ProcessDataFunc>(dlsym(libraryHandle, "processData"));
+    if (!processDataFunc) {
+        std::cerr << "Error loading processData: " << dlerror() << std::endl;
+        dlclose(libraryHandle);
+        return 1;
+    }
+#endif
+
+    // Data to pass to the shared library
+    int myData = 42;
+
+    // Pass the pointer to the shared library
+    processDataFunc(&myData);
+
+#if defined(_WIN32)
+    // Close the library on Windows
+    FreeLibrary(libraryHandle);
+#else
+    // Close the library on Linux
+    dlclose(libraryHandle);
+#endif
+
+    return 0;
+}
+
+
+bash 
+
+  # Compile the shared library
+g++ -shared -fPIC lib_example.cpp -o libexample_lib.so
+
+# Compile the main application
+g++ main.cpp -ldl -o main
+
+# Run the executable
+./main
