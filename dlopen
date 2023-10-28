@@ -108,3 +108,67 @@ g++ main.cpp -ldl -o main
 
 # Run the executable
 ./main
+
+
+
+#include <iostream>
+#include <vector>
+#include <nlohmann/json.hpp>
+
+// Define the Person struct
+struct Person {
+    std::string name;
+    int age;
+
+    // Define from_json and to_json functions for Person
+    static void from_json(const nlohmann::json& j, Person& person) {
+        j.at("name").get_to(person.name);
+        j.at("age").get_to(person.age);
+    }
+
+    static void to_json(nlohmann::json& j, const Person& person) {
+        j = nlohmann::json{{"name", person.name}, {"age", person.age}};
+    }
+};
+
+// Define the ModelSelector struct
+struct ModelSelector {
+    std::vector<Person> persons;
+
+    // Define from_json and to_json functions for ModelSelector
+    static void from_json(const nlohmann::json& j, ModelSelector& modelSelector) {
+        j.at("persons").get_to(modelSelector.persons);
+    }
+
+    static void to_json(nlohmann::json& j, const ModelSelector& modelSelector) {
+        j = nlohmann::json{{"persons", modelSelector.persons}};
+    }
+};
+
+int main() {
+    // Create a ModelSelector object
+    ModelSelector modelSelector;
+    modelSelector.persons = {
+        {"Alice", 25},
+        {"Bob", 30},
+        {"Charlie", 22}
+    };
+
+    // Serialize the ModelSelector to JSON
+    nlohmann::json jsonModelSelector = modelSelector;
+
+    // Print the serialized JSON for ModelSelector
+    std::cout << "Serialized JSON for ModelSelector:\n" << jsonModelSelector.dump(2) << "\n\n";
+
+    // Deserialize ModelSelector from JSON
+    ModelSelector deserializedModelSelector = jsonModelSelector.get<ModelSelector>();
+
+    // Print the deserialized ModelSelector
+    std::cout << "Deserialized ModelSelector:\n";
+    for (const auto& person : deserializedModelSelector.persons) {
+        std::cout << "Name: " << person.name << ", Age: " << person.age << "\n";
+    }
+
+    return 0;
+}
+
