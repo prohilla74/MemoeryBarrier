@@ -1,0 +1,53 @@
+#include <gtest/gtest.h>
+#include <gmock/gmock.h>
+
+class Dependency {
+public:
+    virtual int getValue() const = 0;
+};
+
+class MyClass {
+private:
+    Dependency* dependency;
+
+public:
+    MyClass() : dependency(nullptr) {}
+
+    void setDependency(Dependency* dep) {
+        dependency = dep;
+    }
+
+    int processData() {
+        if (dependency) {
+            return dependency->getValue() * 2;
+        } else {
+            // Handle the case where dependency is not set
+            return -1;
+        }
+    }
+};
+
+class MockDependency : public Dependency {
+public:
+    MOCK_CONST_METHOD0(getValue, int());
+};
+
+TEST(MyClassTest, ProcessDataTest) {
+    // Create a mock object
+    MockDependency mockDependency;
+
+    // Set expectations for the mock object
+    EXPECT_CALL(mockDependency, getValue()).WillOnce(::testing::Return(42));
+
+    // Create an instance of MyClass
+    MyClass myObject;
+
+    // Set the mock object as the dependency
+    myObject.setDependency(&mockDependency);
+
+    // Call the method being tested
+    int result = myObject.processData();
+
+    // Verify the result
+    EXPECT_EQ(result, 84);
+}
