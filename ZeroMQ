@@ -158,5 +158,70 @@ In this example, the native socket is created and the TCP_NODELAY option is set.
 
 
 
+#include <zmq.hpp>
+#include <iostream>
+#include <thread>
+
+void workerThread() {
+    // Prepare the ZeroMQ context
+    zmq::context_t context(1);
+
+    // Create a REP socket with CurveZMQ security
+    zmq::socket_t worker(context, ZMQ_REP);
+    worker.setsockopt(ZMQ_CURVE_SERVER, 1);  // Configure as CurveZMQ server
+
+    // Set the server's long-term secret key (replace with your own key)
+    const std::string serverKey = "SERVER-LONG-TERM-SECRET-KEY";
+    worker.setsockopt(ZMQ_CURVE_SECRETKEY, serverKey.c_str(), serverKey.size());
+
+    // Connect the worker to the proxy
+    worker.connect("inproc://worker");
+
+    // Loop to handle incoming messages
+    while (true) {
+        zmq::message_t identity;
+        zmq::message_t message;
+
+        worker.recv(&identity);
+        worker.recv(&message);
+
+        // Process the message (in this example, just echo it back)
+        worker.send(identity, ZMQ_SNDMORE);
+        worker.send(message, 0);
+    }
+}
+
+int main() {
+    // Start the worker thread
+    std::thread workerThreadObj(workerThread);
+
+    // Prepare the ZeroMQ context
+    zmq::context_t context(1);
+
+    // Create a REP socket with CurveZMQ security
+    zmq::socket_t rep(context, ZMQ_REP);
+    rep.setsockopt(ZMQ_CURVE_SERVER, 1);  // Configure as CurveZMQ server
+
+    // Set the server's long-term secret key (replace with your own key)
+    const std::string serverKey = "SERVER-LONG-TERM-SECRET-KEY";
+    rep.setsockopt(ZMQ_CURVE_SECRETKEY, serverKey.c_str(), serverKey.size());
+
+    // Bind the REP socket
+    rep.bind("tcp://127.0.0.1:5555");
+
+    // Create a worker socket
+    zmq::socket_t worker(context, ZMQ_REP);
+    worker.bind("inproc://worker");
+
+    // Start the proxy (handles the forwarding logic)
+    zmq::proxy(static_cast<void*>(rep), static_cast<void*>(worker), nullptr);
+
+    // Join the worker thread
+    workerThreadObj.join();
+
+    return 0;
+}
+
+
 
 
