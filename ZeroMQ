@@ -166,10 +166,14 @@ int main() {
 
     // Create a DEALER socket with CurveZMQ security
     zmq::socket_t dealer(context, ZMQ_DEALER);
-    
-    // Set the DEALER's long-term secret key (replace with your own key)
-    const std::string clientKey = "CLIENT-LONG-TERM-SECRET-KEY";
+
+    // Set the client's long-term secret key (hardcoded for testing)
+    const std::string clientKey = "client-secret-key";
     dealer.setsockopt(ZMQ_CURVE_SECRETKEY, clientKey.c_str(), clientKey.size());
+
+    // Set the server's public key (hardcoded for testing)
+    const std::string serverPublicKey = "server-public-key";
+    dealer.setsockopt(ZMQ_CURVE_SERVERKEY, serverPublicKey.c_str(), serverPublicKey.size());
 
     // Connect to the REP socket through the proxy
     dealer.connect("tcp://127.0.0.1:5555");
@@ -192,6 +196,7 @@ int main() {
     return 0;
 }
 
+
 ------
 
 #include <zmq.hpp>
@@ -206,8 +211,8 @@ void workerThread() {
     zmq::socket_t worker(context, ZMQ_REP);
     worker.setsockopt(ZMQ_CURVE_SERVER, 1);  // Configure as CurveZMQ server
 
-    // Set the server's long-term secret key (replace with your own key)
-    const std::string serverKey = "SERVER-LONG-TERM-SECRET-KEY";
+    // Set the server's long-term secret key (hardcoded for testing)
+    const std::string serverKey = "server-secret-key";
     worker.setsockopt(ZMQ_CURVE_SECRETKEY, serverKey.c_str(), serverKey.size());
 
     // Connect the worker to the proxy
@@ -238,8 +243,8 @@ int main() {
     zmq::socket_t rep(context, ZMQ_REP);
     rep.setsockopt(ZMQ_CURVE_SERVER, 1);  // Configure as CurveZMQ server
 
-    // Set the server's long-term secret key (replace with your own key)
-    const std::string serverKey = "SERVER-LONG-TERM-SECRET-KEY";
+    // Set the server's long-term secret key (hardcoded for testing)
+    const std::string serverKey = "server-secret-key";
     rep.setsockopt(ZMQ_CURVE_SECRETKEY, serverKey.c_str(), serverKey.size());
 
     // Bind the REP socket
