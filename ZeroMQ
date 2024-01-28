@@ -156,7 +156,43 @@ int main() {
 }
 In this example, the native socket is created and the TCP_NODELAY option is set. The ZeroMQ socket is then associated with this native socket. Please adapt this code to your specific requirements and test it thoroughly to ensure the desired behavior on your platform and ZeroMQ version.
 
+-- client 
+#include <zmq.hpp>
+#include <iostream>
 
+int main() {
+    // Prepare the ZeroMQ context
+    zmq::context_t context(1);
+
+    // Create a DEALER socket with CurveZMQ security
+    zmq::socket_t dealer(context, ZMQ_DEALER);
+    
+    // Set the DEALER's long-term secret key (replace with your own key)
+    const std::string clientKey = "CLIENT-LONG-TERM-SECRET-KEY";
+    dealer.setsockopt(ZMQ_CURVE_SECRETKEY, clientKey.c_str(), clientKey.size());
+
+    // Connect to the REP socket through the proxy
+    dealer.connect("tcp://127.0.0.1:5555");
+
+    // Send and receive messages
+    for (int i = 0; i < 5; ++i) {
+        // Send a message to the proxy (which forwards it to the server)
+        std::string message = "Hello, server! #" + std::to_string(i);
+        dealer.send(message.data(), message.size(), 0);
+
+        // Receive the echoed message from the server through the proxy
+        zmq::message_t echoedMessage;
+        dealer.recv(&echoedMessage);
+
+        // Print the echoed message
+        std::string echoedMessageStr(static_cast<char*>(echoedMessage.data()), echoedMessage.size());
+        std::cout << "Received echoed message: " << echoedMessageStr << std::endl;
+    }
+
+    return 0;
+}
+
+------
 
 #include <zmq.hpp>
 #include <iostream>
