@@ -1,0 +1,48 @@
+#include <iostream>
+#include <thread>
+#include <csignal>
+
+// Global variable to indicate whether termination signal was received
+volatile sig_atomic_t terminationSignalReceived = 0;
+
+// Signal handler function
+void signalHandler(int signum) {
+    std::cout << "Received signal: " << signum << std::endl;
+    terminationSignalReceived = 1; // Set termination flag
+}
+
+// Function to be executed by each thread
+void threadFunction(int id) {
+    std::cout << "Thread " << id << " started" << std::endl;
+    // Simulate some work
+    std::this_thread::sleep_for(std::chrono::seconds(id + 1));
+    std::cout << "Thread " << id << " finished" << std::endl;
+}
+
+int main() {
+    const int numThreads = 5;
+    std::vector<std::thread> threads;
+
+    // Register signal handler for termination signals
+    signal(SIGTERM, signalHandler);
+    signal(SIGINT, signalHandler);
+
+    // Create and start multiple threads
+    for (int i = 0; i < numThreads; ++i) {
+        threads.emplace_back(threadFunction, i);
+    }
+
+    // Wait for termination signal
+    while (!terminationSignalReceived) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    }
+
+    // Wait for each thread to finish before exiting
+    for (auto& thread : threads) {
+        thread.join();
+    }
+
+    std::cout << "All threads have finished, exiting main thread" << std::endl;
+
+    return 0;
+}
